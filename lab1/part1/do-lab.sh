@@ -3,41 +3,23 @@
 # INCLUDE ALL COMMANDS NEEDED TO PERFORM THE LAB
 # This file will get called from capture_submission.sh
 
+# Enable IP forwarding (optional, but not harmful here)
+docker exec clab-lab1-part1-switch sysctl -w net.ipv4.ip_forward=1
 
-set -e
+# Set interfaces up
+docker exec clab-lab1-part1-switch ip link set dev eth1 up
+docker exec clab-lab1-part1-switch ip link set dev eth2 up
+docker exec clab-lab1-part1-switch ip link set dev eth3 up
+docker exec clab-lab1-part1-switch ip link set dev eth4 up
 
-# Names of the hosts
-hosts=(host1 host2 host3 host4)
+# Create a Linux bridge inside the switch container
+docker exec clab-lab1-part1-switch ip link add name br0 type bridge
 
-# Name of the bridge
-bridge_name=labbridge
+# Set the bridge up
+docker exec clab-lab1-part1-switch ip link set dev br0 up
 
-# 1. Create bridge if not exists
-if ! ip link show $bridge_name &>/dev/null; then
-  echo "Creating bridge: $bridge_name"
-  sudo ip link add name $bridge_name type bridge
-  sudo ip link set dev $bridge_name up
-fi
-
-# 2. Loop over each host to connect them to the bridge
-for host in "${hosts[@]}"; do
-  # Set names for veth pairs
-  veth_host="veth-${host}"
-  veth_br="veth-${host}-br"
-
-  # Delete if they already exist
-  sudo ip link del $veth_host 2>/dev/null || true
-
-  # Create veth pair
-  sudo ip link add $veth_host type veth peer name $veth_br
-
-  # Attach one end to bridge
-  sudo ip link set $veth_br master $bridge_name
-  sudo ip link set $veth_br up
-
-  # Move one end into host namespace and bring up
-  pid=$(docker inspect -f '{{.State.Pid}}' clab-lab1-part1-${host})
-  sudo ip link set $veth_host netns $pid
-  sudo nsenter -t $pid -n ip link set $veth_host name ethX
-  sudo nsenter -t $pid -n ip link set ethX up
-done
+# Add interfaces to the bridge
+docker exec clab-lab1-part1-switch ip link set dev eth1 master br0
+docker exec clab-lab1-part1-switch ip link set dev eth2 master br0
+docker exec clab-lab1-part1-switch ip link set dev eth3 master br0
+docker exec clab-lab1-part1-switch ip link set dev eth4 master br0
